@@ -23,6 +23,6 @@ Our expertise encompasses a wide range of services tailored to meet the unique n
 
 We leverage a variety of technologies to deliver top-notch services:
 
-- **Programming Languages**: CSS, Python, Go, Javascripr
+- **Programming Languages**: CSS, Python, Go, Javascript
 
 For more detailed information about our team and services, please visit our [LinkedIn profile](https://www.linkedin.com/company/eclosionit).
