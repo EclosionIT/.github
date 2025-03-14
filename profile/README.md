@@ -1,4 +1,4 @@
-<img src="https://trii.co/static_files/images/trii_principal_logo.svg](https://www.eclosionit.com/web/image/22768-f0ad8d7e/2024%20LOGO-ECLOSION-HORIZONTAL-FONDO-TRANSPARENTE.png" alt="Eclosion Logo" title="Trii" align="right" height="45">
+<img src="https://www.eclosionit.com/web/image/22768-f0ad8d7e/2024%20LOGO-ECLOSION-HORIZONTAL-FONDO-TRANSPARENTE.png" alt="Eclosion Logo" title="Trii" align="right" height="45">
 
 # Welcome to Eclosion IT
 
