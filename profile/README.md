@@ -1,28 +1,36 @@
-<img src="https://www.eclosionit.com/web/image/22768-f0ad8d7e/2024%20LOGO-ECLOSION-HORIZONTAL-FONDO-TRANSPARENTE.png" alt="Eclosion Logo" title="Trii" align="right" height="45">
+<p align="center">
+  <a href="https://www.eclosionit.com">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.eclosionit.com/brand/logo-horizontal-dark.svg">
+      <img src="https://www.eclosionit.com/brand/logo-horizontal.svg" alt="Eclosion IT" width="360">
+    </picture>
+  </a>
+</p>
 
-# Welcome to Eclosion IT
+<p align="center">
+  Software development, AI, IT consulting and Odoo implementation for companies in Colombia and Latin America.
+</p>
 
-Eclosion IT is a privately held company specializing in IT services and consulting, headquartered in Bogotá, Colombia. Established in 2004, we have been committed to delivering innovative solutions that empower businesses to achieve their goals.
+## What we do
 
-## Services
+- **Custom software development**: web applications, portals and internal systems built around your processes.
+- **Odoo implementation**: ERP, CRM, inventory, manufacturing and accounting. As Odoo partners we configure, adapt and launch it.
+- **Integrations and APIs**: we connect Odoo and your systems with banks, payment gateways, online stores, DIAN e-invoicing providers and any other API.
+- **Consulting and digital transformation**: we diagnose processes, prioritize what creates value and define a realistic technology roadmap.
+- **Applied AI**: automatic document reading, assistants that know your company and AI automations, measured against a baseline and with your data protected.
+- **Support and evolution**: help desk, training, continuous improvement and version upgrades after go-live.
 
-Our expertise encompasses a wide range of services tailored to meet the unique needs of our clients:
+## How we work on GitHub
 
-- **IT Consulting**: Providing strategic guidance to optimize technology investments.
-- **Software Development**: Crafting custom applications to drive business efficiency.
-- **HR & Staffing Solutions**: Offering specialized services to help organizations build effective teams.
+- Each Odoo repository is connected to its Odoo.sh project. Work happens in `feat/...` or `fix/...` branches with a PR to the staging branch, and the release is a merge to production.
+- Every PR runs **Odoo CI** (`.github/workflows/odoo-ci.yml` in this repository), which validates the modules and installs and tests them on the official Odoo image.
+- Production and staging branches are protected, and merged branches are deleted automatically.
 
-## Contact Information
+## Contact
 
-- **Address**: Calle 98 A No 51, Bogotá, Colombia
-- **Phone**: +57 300 615 7593
-- **Website**: [www.eclosionit.com](http://www.eclosionit.com)
-- **LinkedIn**: [Eclosion IT](https://www.linkedin.com/company/eclosionit)
+- **Website**: [www.eclosionit.com](https://www.eclosionit.com)
+- **Address**: Calle 98 A # 51-37, Oficina 302, Bogotá D.C., Colombia
+- **Phone / WhatsApp**: [+57 300 615 7593](https://wa.me/573006157593)
+- **LinkedIn**: [Eclosion IT](https://www.linkedin.com/company/eclosionit/) · **Instagram**: [@eclosionit](https://www.instagram.com/eclosionit/)
 
-## Technologies We Use
-
-We leverage a variety of technologies to deliver top-notch services:
-
-- **Programming Languages**: CSS, Python, Go, Javascript
-
-For more detailed information about our team and services, please visit our [LinkedIn profile](https://www.linkedin.com/company/eclosionit).
+<sub>ECLOSION S.A.S. · NIT 830.136.430-1 · Since 2004.</sub>
