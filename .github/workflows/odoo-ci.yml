@@ -104,6 +104,14 @@ jobs:
           extra="$core"
           [ -d enterprise ] && extra="$GITHUB_WORKSPACE/enterprise,$extra"
           python3 .eclo-ci/scripts/odoo_test_plan.py repo "$extra"
+      - name: Python external dependencies of the modules
+        if: steps.plan.outputs.python_deps != ''
+        env:
+          PYTHON_DEPS: ${{ steps.plan.outputs.python_deps }}
+        run: |
+          # shellcheck disable=SC2086
+          pip3 install --no-cache-dir --break-system-packages $PYTHON_DEPS 2>/dev/null \
+            || pip3 install --no-cache-dir $PYTHON_DEPS
       - name: Install modules and run their tests
         if: steps.plan.outputs.modules != ''
         env:
