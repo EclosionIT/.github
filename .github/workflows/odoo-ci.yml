@@ -90,13 +90,6 @@ jobs:
           ref: ${{ inputs.odoo_version }}
           token: ${{ secrets.ENTERPRISE_TOKEN }}
           path: enterprise
-      - name: Python requirements
-        working-directory: repo
-        run: |
-          if [ -f requirements.txt ]; then
-            pip3 install --no-cache-dir --break-system-packages -r requirements.txt 2>/dev/null \
-              || pip3 install --no-cache-dir -r requirements.txt
-          fi
       - name: Test plan
         id: plan
         run: |
@@ -104,14 +97,23 @@ jobs:
           extra="$core"
           [ -d enterprise ] && extra="$GITHUB_WORKSPACE/enterprise,$extra"
           python3 .eclo-ci/scripts/odoo_test_plan.py repo "$extra"
-      - name: Python external dependencies of the modules
-        if: steps.plan.outputs.python_deps != ''
+      # pip downloads the same wheels on every run: cache them per Odoo version and dependency set.
+      - name: Cache pip downloads
+        uses: actions/cache@v6
+        with:
+          path: /root/.cache/pip
+          key: pip-odoo${{ inputs.odoo_version }}-${{ hashFiles('repo/requirements.txt') }}-${{ steps.plan.outputs.python_deps }}
+          restore-keys: |
+            pip-odoo${{ inputs.odoo_version }}-${{ hashFiles('repo/requirements.txt') }}-
+            pip-odoo${{ inputs.odoo_version }}-
+      - name: Python dependencies (requirements.txt + external_dependencies of the modules)
         env:
           PYTHON_DEPS: ${{ steps.plan.outputs.python_deps }}
         run: |
+          install() { pip3 install --break-system-packages "$@" 2>/dev/null || pip3 install "$@"; }
+          if [ -f repo/requirements.txt ]; then install -r repo/requirements.txt; fi
           # shellcheck disable=SC2086
-          pip3 install --no-cache-dir --break-system-packages $PYTHON_DEPS 2>/dev/null \
-            || pip3 install --no-cache-dir $PYTHON_DEPS
+          if [ -n "$PYTHON_DEPS" ]; then install $PYTHON_DEPS; fi
       - name: Install modules and run their tests
         if: steps.plan.outputs.modules != ''
         env:
