@@ -58,6 +58,10 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The odoo image runs steps with sh by default; the steps use bash (PIPESTATUS).
+    defaults:
+      run:
+        shell: bash
     container:
       image: odoo:${{ inputs.odoo_version }}
       options: --user root
@@ -128,19 +132,7 @@ jobs:
             --stop-after-init --log-level=info 2>&1 | tee odoo.log
           status=${PIPESTATUS[0]}
           set -e
-          errors=$(grep -cE '^[0-9-]+ [0-9:,]+ [0-9]+ (ERROR|CRITICAL) ' odoo.log || true)
-          {
-            echo "### Odoo install and tests"
-            echo
-            echo "Exit code: $status. ERROR/CRITICAL log lines: $errors."
-            if [ "$errors" != "0" ]; then
-              echo
-              echo '```'
-              grep -E '^[0-9-]+ [0-9:,]+ [0-9]+ (ERROR|CRITICAL) ' odoo.log | cut -c1-300 | head -40
-              echo '```'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          [ "$status" = "0" ] && [ "$errors" = "0" ]
+          python3 .eclo-ci/scripts/odoo_verdict.py odoo.log "$status" "$MODULES"
       - name: Odoo log
         if: always() && steps.plan.outputs.modules != ''
         uses: actions/upload-artifact@v7
