@@ -1,0 +1,151 @@
+# Reusable CI for the Odoo repositories of EclosionIT.
+#
+# Each repository calls it from .github/workflows/odoo-ci.yml with its Odoo version:
+#
+#   jobs:
+#     odoo:
+#       uses: EclosionIT/.github/.github/workflows/odoo-ci.yml@main
+#       with:
+#         odoo_version: "18.0"
+#       secrets: inherit
+#
+# Jobs:
+#   checks  manifests, files listed in data/demo, Python that compiles and well-formed XML (seconds).
+#   tests   Postgres + the official odoo:<version> image: installs the repository modules with
+#           --test-enable and runs only their tests (--test-tags /<module>). Modules whose dependencies
+#           are not available (e.g. Enterprise without access) are skipped and listed in the summary.
+#
+# Enterprise (optional): set the repository or organization variable ENTERPRISE_REPO (e.g. "odoo/enterprise")
+# and the secret ENTERPRISE_TOKEN with read access. Without them, only Community dependencies are used.
+name: Odoo CI
+
+on:
+  workflow_call:
+    inputs:
+      odoo_version:
+        description: Odoo series of the repository, e.g. "18.0".
+        required: true
+        type: string
+      ci_ref:
+        description: Ref of EclosionIT/.github with the CI scripts (for testing changes to this workflow).
+        required: false
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Checks (Odoo ${{ inputs.odoo_version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: EclosionIT/.github
+          ref: ${{ inputs.ci_ref }}
+          path: .eclo-ci
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Static checks
+        run: python3 .eclo-ci/scripts/odoo_checks.py . "${{ inputs.odoo_version }}"
+
+  tests:
+    name: Tests (Odoo ${{ inputs.odoo_version }})
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: odoo:${{ inputs.odoo_version }}
+      options: --user root
+    services:
+      db:
+        image: ${{ (inputs.odoo_version == '15.0' || inputs.odoo_version == '16.0') && 'postgres:14' || 'postgres:16' }}
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U odoo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: repo
+      - uses: actions/checkout@v7
+        with:
+          repository: EclosionIT/.github
+          ref: ${{ inputs.ci_ref }}
+          path: .eclo-ci
+      - name: Enterprise addons
+        if: vars.ENTERPRISE_REPO != ''
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.ENTERPRISE_REPO }}
+          ref: ${{ inputs.odoo_version }}
+          token: ${{ secrets.ENTERPRISE_TOKEN }}
+          path: enterprise
+      - name: Test plan
+        id: plan
+        run: |
+          core=$(python3 -c "import odoo.addons, os; print(','.join(p for p in odoo.addons.__path__ if os.path.isdir(p)))")
+          extra="$core"
+          [ -d enterprise ] && extra="$GITHUB_WORKSPACE/enterprise,$extra"
+          python3 .eclo-ci/scripts/odoo_test_plan.py repo "$extra"
+      # pip downloads the same wheels on every run: cache them per Odoo version and dependency set.
+      - name: Cache pip downloads
+        uses: actions/cache@v6
+        with:
+          path: /root/.cache/pip
+          key: pip-odoo${{ inputs.odoo_version }}-${{ hashFiles('repo/requirements.txt') }}-${{ steps.plan.outputs.python_deps }}
+          restore-keys: |
+            pip-odoo${{ inputs.odoo_version }}-${{ hashFiles('repo/requirements.txt') }}-
+            pip-odoo${{ inputs.odoo_version }}-
+      - name: Python dependencies (requirements.txt + external_dependencies of the modules)
+        env:
+          PYTHON_DEPS: ${{ steps.plan.outputs.python_deps }}
+        run: |
+          install() { pip3 install --break-system-packages "$@" 2>/dev/null || pip3 install "$@"; }
+          if [ -f repo/requirements.txt ]; then install -r repo/requirements.txt; fi
+          # shellcheck disable=SC2086
+          if [ -n "$PYTHON_DEPS" ]; then install $PYTHON_DEPS; fi
+      - name: Install modules and run their tests
+        if: steps.plan.outputs.modules != ''
+        env:
+          MODULES: ${{ steps.plan.outputs.modules }}
+          ADDONS_PATH: ${{ steps.plan.outputs.addons_path }}
+        run: |
+          tags=$(echo "$MODULES" | sed -E 's#([^,]+)#/\1#g')
+          set +e
+          odoo --db_host=db --db_port=5432 --db_user=odoo --db_password=odoo -d ci \
+            --addons-path="$ADDONS_PATH" --data-dir=/tmp/odoo-data \
+            -i "$MODULES" --test-enable --test-tags="$tags" \
+            --stop-after-init --log-level=info 2>&1 | tee odoo.log
+          status=${PIPESTATUS[0]}
+          set -e
+          errors=$(grep -cE '^[0-9-]+ [0-9:,]+ [0-9]+ (ERROR|CRITICAL) ' odoo.log || true)
+          {
+            echo "### Odoo install and tests"
+            echo
+            echo "Exit code: $status. ERROR/CRITICAL log lines: $errors."
+            if [ "$errors" != "0" ]; then
+              echo
+              echo '```'
+              grep -E '^[0-9-]+ [0-9:,]+ [0-9]+ (ERROR|CRITICAL) ' odoo.log | cut -c1-300 | head -40
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$status" = "0" ] && [ "$errors" = "0" ]
+      - name: Odoo log
+        if: always() && steps.plan.outputs.modules != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: odoo-log
+          path: odoo.log
+          if-no-files-found: ignore
+          retention-days: 7
