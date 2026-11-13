@@ -73,7 +73,7 @@ jobs:
           POSTGRES_PASSWORD: odoo
           POSTGRES_DB: postgres
         options: >-
-          --health-cmd "pg_isready -U odoo"
+          --health-cmd "pg_isready -U odoo -d postgres"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20

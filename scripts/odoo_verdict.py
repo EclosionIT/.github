@@ -25,11 +25,14 @@ FATAL = ("Failed to load registry", "Failed to initialize database", "Couldn't l
 def main():
     log_path, exit_code, modules = sys.argv[1], int(sys.argv[2]), [m for m in sys.argv[3].split(",") if m]
     own_prefixes = tuple(f"odoo.addons.{module}" for module in modules)
-    own, foreign, fatal = [], [], []
+    own, foreign, fatal, exceptions = [], [], [], []
     failed = errors = total = 0
     with open(log_path, encoding="utf-8", errors="replace") as handle:
         for raw in handle:
             line = raw.rstrip("\n")
+            # Python exceptions printed outside the logger (e.g. a crash during registry setup, exit 255).
+            if re.match(r"^[A-Za-z_][\w.]*(Error|Exception|Warning)\b.*", line) and not line.startswith("Traceback"):
+                exceptions.append(line)
             result = RESULT.search(line)
             if result and "odoo.tests.result" in line:
                 failed, errors, total = (int(value) for value in result.groups())
@@ -50,6 +53,8 @@ def main():
     failure = exit_code != 0 or fatal or failed or errors or own
     report = ["### Odoo install and tests\n\n",
               f"Exit code {exit_code} · tests: {total} run, {failed} failed, {errors} error(s).\n"]
+    if failure and not fatal and not own and exceptions:
+        fatal = exceptions[-3:]
     for title, lines in (("Fatal (installation did not finish)", fatal), ("Errors in the repository modules", own),
                          ("Errors from other modules (not counted)", foreign)):
         if lines:
