@@ -1,0 +1,35 @@
+# black y ruff de los repositorios de módulos Odoo de Eclosion IT (copia idéntica en odoo-addons-template).
+# target py310 sirve para Odoo 19 (Python >= 3.10) y 20 (>= 3.12); un repo solo de 20.0 puede subirlo a py312.
+[tool.black]
+line-length = 99
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 99
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "I",   # isort
+    "C4",  # flake8-comprehensions
+    "BLE", # except Exception sin justificar
+]
+ignore = [
+    "E501", # longitud de línea: la controla black
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Odoo: los __init__.py importan submódulos para registrar modelos (efecto
+# secundario) y el orden de importación es el orden de carga: no reordenar.
+"__init__.py" = ["F401", "I001"]
+# El manifiesto de Odoo es un diccionario literal evaluado por el servidor.
+"__manifest__.py" = ["B018"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["odoo", "odoo.addons"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

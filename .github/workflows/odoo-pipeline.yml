@@ -1,0 +1,149 @@
+# Single entry point of the CI of the Odoo repositories of EclosionIT.
+#
+#   lint     odoo-lint.yml    pre-commit (black, ruff, pylint-odoo) with the repository's config or the default.
+#   pr       odoo-pr.yml      pull_request only: Conventional Commits title, manifest version bump, gitleaks.
+#   odoo     odoo-ci.yml      static checks + install and test the modules on odoo:<version> (after lint).
+#   result   one check that sums up the others: require "<caller job> / result" in the branch ruleset.
+#
+#   jobs:
+#     ci:
+#       uses: EclosionIT/.github/.github/workflows/odoo-pipeline.yml@v1
+#       with:
+#         odoo_version: "20.0"
+#       secrets:
+#         ENTERPRISE_TOKEN: ${{ secrets.ENTERPRISE_TOKEN }}
+#
+# The nested workflows are called with the self-repository syntax ($/), so they run from the same commit as
+# this file; and every job checks out its scripts and configs at job.workflow_sha. A caller pinned to v1,
+# v1.1.0 or a SHA runs one consistent version of everything. Nesting depth: caller -> pipeline -> odoo-ci
+# (3 of the 10 levels GitHub allows).
+name: Odoo pipeline
+
+on:
+  workflow_call:
+    inputs:
+      odoo_version:
+        description: Odoo series of the repository, e.g. "20.0".
+        required: true
+        type: string
+      lint:
+        description: Run pre-commit (odoo-lint.yml).
+        required: false
+        type: boolean
+        default: true
+      pr_checks:
+        description: On pull_request, check title, version bump and secrets (odoo-pr.yml).
+        required: false
+        type: boolean
+        default: true
+      tests:
+        description: Static checks and module tests on the official Odoo image (odoo-ci.yml).
+        required: false
+        type: boolean
+        default: true
+      skip_modules:
+        description: Comma or space separated modules not to install and test on their own.
+        required: false
+        type: string
+        default: ""
+      lint_only_changed:
+        description: On pull requests, lint only the changed files (for repositories with lint debt).
+        required: false
+        type: boolean
+        default: false
+      lint_skip_hooks:
+        description: Comma separated pre-commit hook ids to skip, e.g. "pylint_odoo".
+        required: false
+        type: string
+        default: ""
+      python_version:
+        description: Python used to run pre-commit.
+        required: false
+        type: string
+        default: "3.12"
+      version_ignore:
+        description: Globs of files that do not need a version bump (see odoo-pr.yml); "none" = all need it.
+        required: false
+        type: string
+        default: ""
+      ci_ref:
+        description: Ref of EclosionIT/.github with scripts and configs. Empty = the commit of this workflow.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      ENTERPRISE_TOKEN:
+        description: Token with read access to the repository in the variable ENTERPRISE_REPO (optional).
+        required: false
+
+permissions: {}
+
+jobs:
+  lint:
+    name: Lint
+    if: inputs.lint
+    permissions:
+      contents: read
+    uses: $/.github/workflows/odoo-lint.yml
+    with:
+      odoo_version: ${{ inputs.odoo_version }}
+      python_version: ${{ inputs.python_version }}
+      only_changed: ${{ inputs.lint_only_changed }}
+      skip_hooks: ${{ inputs.lint_skip_hooks }}
+      ci_ref: ${{ inputs.ci_ref }}
+
+  pr:
+    name: PR
+    if: inputs.pr_checks && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: $/.github/workflows/odoo-pr.yml
+    with:
+      odoo_version: ${{ inputs.odoo_version }}
+      version_ignore: ${{ inputs.version_ignore }}
+      ci_ref: ${{ inputs.ci_ref }}
+
+  odoo:
+    name: Odoo
+    needs: lint
+    # Runs after a green (or disabled) lint; a lint failure skips the long test job.
+    if: ${{ !cancelled() && inputs.tests && (needs.lint.result == 'success' || needs.lint.result == 'skipped') }}
+    permissions:
+      contents: read
+    uses: $/.github/workflows/odoo-ci.yml
+    with:
+      odoo_version: ${{ inputs.odoo_version }}
+      skip_modules: ${{ inputs.skip_modules }}
+      ci_ref: ${{ inputs.ci_ref }}
+    secrets:
+      ENTERPRISE_TOKEN: ${{ secrets.ENTERPRISE_TOKEN }}
+
+  result:
+    name: result
+    needs: [lint, pr, odoo]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Sum up the pipeline
+        env:
+          LINT: ${{ needs.lint.result }}
+          PR: ${{ needs.pr.result }}
+          ODOO: ${{ needs.odoo.result }}
+          TESTS_ENABLED: ${{ inputs.tests }}
+        run: |
+          echo "lint=$LINT pr=$PR odoo=$ODOO"
+          status=0
+          for result in "$LINT" "$PR" "$ODOO"; do
+            case "$result" in
+              success|skipped) ;;
+              *) status=1 ;;
+            esac
+          done
+          # Tests enabled but skipped while lint passed would hide a broken condition: fail loudly.
+          if [ "$TESTS_ENABLED" = "true" ] && [ "$ODOO" = "skipped" ] && [ "$LINT" != "failure" ]; then
+            echo "::error::The tests were enabled but did not run"
+            status=1
+          fi
+          exit "$status"

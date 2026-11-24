@@ -1,0 +1,109 @@
+# Reusable lint of the Odoo repositories of EclosionIT: pre-commit (black, ruff, pylint-odoo and the
+# pre-commit-hooks checks).
+#
+# Uses the .pre-commit-config.yaml of the calling repository. When the repository has none, it uses the
+# defaults in .github/configs/ of this repository (pre-commit config, .pylintrc and pyproject.toml; each
+# file only when the repository does not have its own). See README.md.
+#
+#   jobs:
+#     lint:
+#       uses: EclosionIT/.github/.github/workflows/odoo-lint.yml@v1
+#       with:
+#         odoo_version: "20.0"
+name: Odoo lint
+
+on:
+  workflow_call:
+    inputs:
+      odoo_version:
+        description: Odoo series of the repository, e.g. "20.0" (valid-odoo-versions of the default .pylintrc).
+        required: false
+        type: string
+        default: ""
+      python_version:
+        description: Python used to run pre-commit.
+        required: false
+        type: string
+        default: "3.12"
+      only_changed:
+        description: On pull requests, lint only the files the pull request changes (for repositories with lint debt).
+        required: false
+        type: boolean
+        default: false
+      skip_hooks:
+        description: Comma separated pre-commit hook ids to skip (pre-commit SKIP), e.g. "pylint_odoo".
+        required: false
+        type: string
+        default: ""
+      ci_ref:
+        description: Ref of EclosionIT/.github with the default configs. Empty = the commit of this workflow.
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # only_changed compares with the base of the pull request.
+          # Strings: a bare 0 is falsy in expressions and would always yield 1.
+          fetch-depth: ${{ (inputs.only_changed && github.event_name == 'pull_request') && '0' || '1' }}
+      # The configs come from the same commit as this workflow (job.workflow_sha), not from main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.ci_ref || job.workflow_sha }}
+          path: .eclo-ci
+          persist-credentials: false
+          sparse-checkout: .github/configs
+      - name: Default configuration (only the files the repository lacks)
+        env:
+          ODOO_VERSION: ${{ inputs.odoo_version }}
+        run: |
+          configs=.eclo-ci/.github/configs
+          if [ -f .pre-commit-config.yaml ]; then
+            echo "Using the repository's .pre-commit-config.yaml"
+          else
+            echo "::notice::The repository has no .pre-commit-config.yaml: using the EclosionIT default"
+            cp "$configs/.pre-commit-config.yaml" .pre-commit-config.yaml
+            [ -f .pylintrc ] || cp "$configs/pylintrc" .pylintrc
+            [ -f pyproject.toml ] || cp "$configs/pyproject.toml" pyproject.toml
+            if [ -n "$ODOO_VERSION" ]; then
+              sed -i "s/^valid-odoo-versions=.*/valid-odoo-versions=$ODOO_VERSION/" .pylintrc
+            fi
+          fi
+          # Never lint the checkout of this repository.
+          rm -rf .eclo-ci
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ inputs.python_version }}
+      - name: Cache pre-commit environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-py${{ inputs.python_version }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-py${{ inputs.python_version }}-
+      - name: Install pre-commit
+        run: python -m pip install --disable-pip-version-check pre-commit==4.7.0
+      - name: Run pre-commit
+        env:
+          SKIP: ${{ inputs.skip_hooks }}
+          ONLY_CHANGED: ${{ inputs.only_changed && github.event_name == 'pull_request' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$ONLY_CHANGED" = "true" ]; then
+            # HEAD is the merge commit of the pull request: base...HEAD are exactly its changes.
+            pre-commit run --show-diff-on-failure --color=always --from-ref "$BASE_SHA" --to-ref HEAD
+          else
+            pre-commit run --all-files --show-diff-on-failure --color=always
+          fi
