@@ -143,13 +143,15 @@ Requirements: GitHub.com (the `job.workflow_*` context is not on GitHub Enterpri
   secrets and job names keep their meaning, so `odoo-ci.yml@v1` callers keep working without changes.
 - A `v2` only for a change that breaks callers (required input, renamed job, removed input).
 
-Release, after merging to `main`:
+Release, after merging to `main`. Use **lightweight** tags (no `-a`): with an annotated tag, GitHub resolves
+the nested `$/` workflows to the tag object SHA instead of the commit, and the caller run ends in
+`startup_failure` (seen on 2026-11-24 with v1.1.0).
 
 ```bash
 git switch main && git pull
-git tag -a v1.1.0 -m "v1.1.0: odoo-pipeline, odoo-lint, odoo-pr"
-git tag -f -a v1 -m "v1 -> v1.1.0"
-git push origin v1.1.0
+git tag v1.1.1
+git tag -f v1
+git push origin v1.1.1
 git push -f origin v1
 ```
 
