@@ -165,6 +165,15 @@ class VersionBumpTest(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertIn("| `eclo_b` | deleted | | ok |", report)
 
+    def test_file_moved_to_another_module_touches_both(self):
+        # git diff detects renames by default and would list only the new path: eclo_a must still count.
+        self.repo.git("mv", "eclo_a/models/a.py", "eclo_b/models/a.py")
+        self.repo.write("eclo_b/__manifest__.py", manifest("20.0.2.3.5"))
+        errors, report = self.run_check()
+        self.assertEqual([path for path, _m in errors], ["eclo_a/__manifest__.py"])
+        self.assertIn("eclo_a/models/a.py", self.messages(errors))
+        self.assertIn("| `eclo_b` | 20.0.2.3.4 | 20.0.2.3.5 | ok |", report)
+
     def test_manifest_that_is_not_a_literal_fails(self):
         self.repo.write("eclo_a/__manifest__.py", "dict(name='x')\n")
         errors, _report = self.run_check()

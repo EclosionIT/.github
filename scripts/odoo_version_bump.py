@@ -88,8 +88,10 @@ def is_ignored(relative, patterns):
 
 def touched_modules(repo, base, head, ignore):
     """{module_dir: [changed files]} of the modules touched between the merge base and head."""
-    # -z: paths verbatim (no quoting of spaces or non-ASCII names).
-    changed = [p for p in git(repo, "diff", "-z", "--name-only", f"{base}...{head}").split("\0") if p]
+    # -z: paths verbatim (no quoting of spaces or non-ASCII names). --no-renames: a file moved from one
+    # module to another lists both paths, so the module it left is checked too.
+    diff = git(repo, "diff", "-z", "--no-renames", "--name-only", f"{base}...{head}")
+    changed = [p for p in diff.split("\0") if p]
     manifests = set()
     for ref in (base, head):
         for path in git(repo, "ls-tree", "-r", "-z", "--name-only", ref).split("\0"):
