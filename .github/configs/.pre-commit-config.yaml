@@ -17,7 +17,9 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ["--maxkb=1024"]
+        # --enforce-all: without it the hook only looks at staged new files, and in CI
+        # (pre-commit run --all-files, nothing staged) it would check nothing.
+        args: ["--maxkb=1024", "--enforce-all"]
       - id: debug-statements
   - repo: https://github.com/psf/black
     rev: 25.9.0
