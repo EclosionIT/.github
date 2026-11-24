@@ -1,0 +1,37 @@
+# pre-commit de los repositorios de módulos Odoo de Eclosion IT.
+# Fuente: EclosionIT/.github/.github/configs/.pre-commit-config.yaml (la plantilla odoo-addons-template
+# trae una copia idéntica). El workflow odoo-lint.yml usa esta configuración cuando el repositorio no
+# tiene su propio .pre-commit-config.yaml.
+# Local: pip install pre-commit && pre-commit install && pre-commit run --all-files
+exclude: (^|/)static/(lib|description)/
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.csv$
+      - id: end-of-file-fixer
+        exclude: \.csv$
+      - id: check-xml
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # --enforce-all: without it the hook only looks at staged new files, and in CI
+        # (pre-commit run --all-files, nothing staged) it would check nothing.
+        args: ["--maxkb=1024", "--enforce-all"]
+      - id: debug-statements
+  - repo: https://github.com/psf/black
+    rev: 25.9.0
+    hooks:
+      - id: black
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.3
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+  - repo: https://github.com/OCA/pylint-odoo
+    rev: v10.0.12
+    hooks:
+      - id: pylint_odoo
+        args: ["--rcfile=.pylintrc"]

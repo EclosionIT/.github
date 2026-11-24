@@ -1,0 +1,11 @@
+# actionlint 1.7.12 (latest as of 2026-11) predates two GitHub Actions features these workflows rely on.
+# Both are documented by GitHub; drop each ignore once actionlint supports it.
+#  - job.workflow_repository / job.workflow_sha (contexts reference, "job context"): checkout the scripts
+#    from the same commit as the running reusable workflow.
+#  - "$/" self-repository syntax in jobs.<id>.uses (changelog 2026-07-30): call a sibling reusable
+#    workflow from the same commit.
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
+      - 'reusable workflow call "\$/\.github/workflows/[^"]+" at "uses" is not following the format'

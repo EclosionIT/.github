@@ -1,0 +1,146 @@
+# Reusable pull request checks of the Odoo repositories of EclosionIT. Call it only on pull_request.
+#
+#   title     the pull request title follows Conventional Commits (type(scope): description).
+#   versions  every module the pull request touches has version <series>.x.y.z in __manifest__.py and
+#             raises it compared with the base branch (Odoo.sh only updates a module when it goes up).
+#             Documentation, static/description and tests/ do not need a bump (input version_ignore).
+#   secrets   gitleaks (MIT binary, no license key) over the commits of the pull request. Honours the
+#             .gitleaks.toml and .gitleaksignore of the repository.
+#
+#   jobs:
+#     pr:
+#       if: github.event_name == 'pull_request'
+#       uses: EclosionIT/.github/.github/workflows/odoo-pr.yml@v1
+#       with:
+#         odoo_version: "20.0"
+name: Odoo pull request checks
+
+on:
+  workflow_call:
+    inputs:
+      odoo_version:
+        description: Odoo series of the repository, e.g. "20.0".
+        required: true
+        type: string
+      title:
+        description: Check the pull request title.
+        required: false
+        type: boolean
+        default: true
+      versions:
+        description: Check the manifest version bump of the touched modules.
+        required: false
+        type: boolean
+        default: true
+      version_ignore:
+        description: >-
+          Space separated globs, relative to each module, of files that do not need a version bump.
+          Empty = the defaults of scripts/odoo_version_bump.py ("*.md *.rst static/description/* tests/*");
+          "none" = every file needs a bump.
+        required: false
+        type: string
+        default: ""
+      secrets_scan:
+        description: Scan the commits of the pull request for secrets with gitleaks.
+        required: false
+        type: boolean
+        default: true
+      ci_ref:
+        description: Ref of EclosionIT/.github with the scripts. Empty = the commit of this workflow.
+        required: false
+        type: string
+        default: ""
+
+permissions: {}
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  title:
+    name: PR title
+    if: inputs.title && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.ci_ref || job.workflow_sha }}
+          path: .eclo-ci
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Conventional Commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 .eclo-ci/scripts/pr_title.py
+
+  versions:
+    name: Module versions
+    if: inputs.versions && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.ci_ref || job.workflow_sha }}
+          path: .eclo-ci
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Version bump of the touched modules
+        env:
+          ODOO_VERSION: ${{ inputs.odoo_version }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          VERSION_IGNORE: ${{ inputs.version_ignore }}
+        run: |
+          set -f  # the globs go to the script as they are, never expanded by the shell
+          args=()
+          if [ "$VERSION_IGNORE" = "none" ]; then
+            args+=(--ignore "")
+          else
+            for pattern in $VERSION_IGNORE; do args+=(--ignore "$pattern"); done
+          fi
+          python3 .eclo-ci/scripts/odoo_version_bump.py --repo repo \
+            --base "$BASE_SHA" --head "$HEAD_SHA" --series "$ODOO_VERSION" "${args[@]}"
+
+  secrets:
+    name: Secrets (gitleaks)
+    if: inputs.secrets_scan && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks ${{ env.GITLEAKS_VERSION }}
+        run: |
+          dir="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$dir"
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$dir/$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$tarball"
+          echo "$GITLEAKS_SHA256  $dir/$tarball" | sha256sum -c -
+          tar -xzf "$dir/$tarball" -C "$dir" gitleaks
+          echo "$dir" >> "$GITHUB_PATH"
+      - name: Scan the commits of the pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gitleaks git --no-banner --redact --verbose \
+            --log-opts="$BASE_SHA..$HEAD_SHA" .
