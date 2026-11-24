@@ -5,6 +5,8 @@ paths (Odoo core, the repository and, when available, Enterprise). The others ar
 modules listed, so a module that needs Enterprise does not break CI when there is no Enterprise access.
 
 Usage: python3 odoo_test_plan.py <repo_root> <extra_addons_path>[,<extra_addons_path>...]
+Optional: SKIP_MODULES (environment, comma or space separated) lists modules of the repository that are not
+installed nor tested on their own (they are still installed when a tested module depends on them).
 Writes `modules` (comma separated), `addons_path` and `python_deps` (pip names of the
 external_dependencies.python of the tested modules, as Odoo.sh installs them) to $GITHUB_OUTPUT and a report
 to the step summary.
@@ -69,8 +71,12 @@ def main():
             missing |= missing_dependencies(dependency, seen)
         return missing
 
+    skip = {name for name in os.environ.get("SKIP_MODULES", "").replace(",", " ").split() if name}
     testable, skipped = [], []
     for name in sorted(repo_modules):
+        if name in skip:
+            skipped.append((name, "skipped by the caller (skip_modules)"))
+            continue
         data = manifest(name)
         if data is None or not data.get("installable", True):
             skipped.append((name, "not installable"))

@@ -1,13 +1,17 @@
 # Reusable CI for the Odoo repositories of EclosionIT.
 #
-# Each repository calls it from .github/workflows/odoo-ci.yml with its Odoo version:
+# Each repository calls it from .github/workflows/odoo-ci.yml with its Odoo version (or, to also get lint
+# and the pull request checks, calls odoo-pipeline.yml, which calls this one):
 #
 #   jobs:
 #     odoo:
-#       uses: EclosionIT/.github/.github/workflows/odoo-ci.yml@main
+#       uses: EclosionIT/.github/.github/workflows/odoo-ci.yml@v1
 #       with:
-#         odoo_version: "18.0"
+#         odoo_version: "20.0"
 #       secrets: inherit
+#
+# The scripts are checked out from the same commit as this workflow (job.workflow_sha), so a caller pinned
+# to a tag or a SHA never runs scripts from main.
 #
 # Jobs:
 #   checks  manifests, files listed in data/demo, Python that compiles and well-formed XML (seconds).
@@ -27,37 +31,59 @@ on:
         required: true
         type: string
       ci_ref:
-        description: Ref of EclosionIT/.github with the CI scripts (for testing changes to this workflow).
+        description: >-
+          Ref of EclosionIT/.github with the CI scripts. Empty (default) = the commit of this workflow.
+          Only for testing script changes from a branch.
         required: false
         type: string
-        default: main
+        default: ""
+      skip_modules:
+        description: >-
+          Comma or space separated modules of the repository not to install and test on their own
+          (still installed when a tested module depends on them).
+        required: false
+        type: string
+        default: ""
+    secrets:
+      ENTERPRISE_TOKEN:
+        description: Token with read access to ENTERPRISE_REPO (optional).
+        required: false
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   checks:
     name: Checks (Odoo ${{ inputs.odoo_version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: EclosionIT/.github
-          ref: ${{ inputs.ci_ref }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.ci_ref || job.workflow_sha }}
           path: .eclo-ci
-      - uses: actions/setup-python@v7
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Static checks
-        run: python3 .eclo-ci/scripts/odoo_checks.py . "${{ inputs.odoo_version }}"
+        env:
+          ODOO_VERSION: ${{ inputs.odoo_version }}
+        run: python3 .eclo-ci/scripts/odoo_checks.py . "$ODOO_VERSION"
 
   tests:
     name: Tests (Odoo ${{ inputs.odoo_version }})
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
     # The odoo image runs steps with sh by default; the steps use bash (PIPESTATUS).
     defaults:
       run:
@@ -78,24 +104,30 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: repo
-      - uses: actions/checkout@v7
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: EclosionIT/.github
-          ref: ${{ inputs.ci_ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ inputs.ci_ref || job.workflow_sha }}
           path: .eclo-ci
+          persist-credentials: false
+          # No sparse-checkout here: the odoo image may lack git and checkout then downloads a tarball.
       - name: Enterprise addons
         if: vars.ENTERPRISE_REPO != ''
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ vars.ENTERPRISE_REPO }}
           ref: ${{ inputs.odoo_version }}
           token: ${{ secrets.ENTERPRISE_TOKEN }}
           path: enterprise
+          persist-credentials: false
       - name: Test plan
         id: plan
+        env:
+          SKIP_MODULES: ${{ inputs.skip_modules }}
         run: |
           core=$(python3 -c "import odoo.addons, os; print(','.join(p for p in odoo.addons.__path__ if os.path.isdir(p)))")
           extra="$core"
@@ -103,7 +135,7 @@ jobs:
           python3 .eclo-ci/scripts/odoo_test_plan.py repo "$extra"
       # pip downloads the same wheels on every run: cache them per Odoo version and dependency set.
       - name: Cache pip downloads
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /root/.cache/pip
           key: pip-odoo${{ inputs.odoo_version }}-${{ hashFiles('repo/requirements.txt') }}-${{ steps.plan.outputs.python_deps }}
@@ -135,7 +167,7 @@ jobs:
           python3 .eclo-ci/scripts/odoo_verdict.py odoo.log "$status" "$MODULES"
       - name: Odoo log
         if: always() && steps.plan.outputs.modules != ''
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: odoo-log
           path: odoo.log
