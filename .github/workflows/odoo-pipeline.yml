@@ -121,7 +121,8 @@ jobs:
   result:
     name: result
     needs: [lint, pr, odoo]
-    if: always()
+    # Not always(): a run cancelled by the concurrency group must end cancelled, not red.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
