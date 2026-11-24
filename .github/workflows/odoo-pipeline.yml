@@ -121,8 +121,11 @@ jobs:
   result:
     name: result
     needs: [lint, pr, odoo]
-    # Not always(): a run cancelled by the concurrency group must end cancelled, not red.
-    if: ${{ !cancelled() }}
+    # always(), not !cancelled(): a required check that ends "skipped" counts as passed, so a run cancelled
+    # by hand would let the pull request merge. On cancel this job still runs and fails (any needs result
+    # other than success/skipped, cancelled included, is red). A red check on a commit superseded by a newer
+    # push (concurrency) does not matter: the new run reports its own result.
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -136,6 +139,7 @@ jobs:
         run: |
           echo "lint=$LINT pr=$PR odoo=$ODOO"
           status=0
+          # failure and cancelled (and anything else that is not success/skipped) fail the pipeline.
           for result in "$LINT" "$PR" "$ODOO"; do
             case "$result" in
               success|skipped) ;;
