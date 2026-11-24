@@ -84,7 +84,9 @@ used as it is. Otherwise the defaults from [`.github/configs/`](.github/configs)
 Call it only on `pull_request` (every job also checks the event).
 
 - **title**: `scripts/pr_title.py`, `type(scope)!: description` with the types feat, fix, docs, style,
-  refactor, perf, test, build, ci, chore, revert.
+  refactor, perf, test, build, ci, chore, revert. Also accepted: GitHub's Revert button
+  (`Revert "<valid title>"`) and merges between series (`Merge 19.0 into 20.0`,
+  `Merge branch '19.0' into 20.0`).
 - **versions**: `scripts/odoo_version_bump.py`. Every module with changed files (compared with the merge
   base) must have `version` `<series>.x.y.z` in `__manifest__.py` and raise it. New modules only need a valid
   version; deleted modules pass. Changes only to `*.md`, `*.rst`, `static/description/*` or `tests/*` do not

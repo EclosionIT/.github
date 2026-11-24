@@ -36,6 +36,35 @@ class PrTitleTest(unittest.TestCase):
             with self.subTest(title=title):
                 self.assertFalse(pr_title.is_valid(title))
 
+    def test_github_revert_button(self):
+        self.assertTrue(pr_title.is_valid('Revert "fix(eclo_nomina): intereses de cesantías"'))
+        self.assertTrue(pr_title.is_valid('Revert "Revert "feat: portal""'))
+        for title in ('Revert "Update README.md"', 'Revert "Feat: x"', "Revert fix: x", 'Revert ""'):
+            with self.subTest(title=title):
+                self.assertFalse(pr_title.is_valid(title))
+
+    def test_merges_between_series(self):
+        for title in (
+            "Merge 19.0 into 20.0",
+            "Merge branch '19.0' into 20.0",
+            "Merge branch '19.0' into '20.0'",
+            "Merge branch 19.0 into 20.0",
+        ):
+            with self.subTest(title=title):
+                self.assertTrue(pr_title.is_valid(title))
+        for title in (
+            "Merge main into 20.0",
+            "Merge branch 'feat/x' into 20.0",
+            "Merge 19.0 into 20.0 and more",
+            "merge 19.0 into 20.0",
+        ):
+            with self.subTest(title=title):
+                self.assertFalse(pr_title.is_valid(title))
+
+    def test_capitalised_type_is_still_rejected(self):
+        self.assertFalse(pr_title.is_valid("Feat: algo"))
+        self.assertFalse(pr_title.is_valid("Feat(eclo): algo"))
+
     def test_custom_types(self):
         self.assertTrue(pr_title.is_valid("mig(eclo): x", ("mig",)))
         self.assertFalse(pr_title.is_valid("feat(eclo): x", ("mig",)))
